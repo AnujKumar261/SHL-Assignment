@@ -1,105 +1,27 @@
-📌 ## SHL Agent – FastAPI Backend for Skill Assessment Queries
+# 🚀 SHL Agent – FastAPI Backend
 
-🚀 Overview
+SHL Agent is a FastAPI-based backend system designed to intelligently answer queries related to SHL assessments. It uses a combination of semantic search (FAISS-based vector retrieval) and large language models to generate accurate, context-aware responses.
 
-This project is a FastAPI-based intelligent retrieval and chat system designed to answer queries related to SHL assessments and catalog data.
-It uses a combination of retrieval (FAISS/vector search) and LLM-based response generation to provide accurate and contextual answers.
+The system first processes user queries by converting them into embeddings and retrieving the most relevant information from a pre-built SHL catalog dataset. This retrieved context is then passed to an LLM, which generates a final response in a structured and meaningful way.
 
-📂 Project Structure
-SHL-Agent/
-│
-├── app/
-│   ├── main.py              # FastAPI entry point
-│   ├── llm.py               # LLM integration logic
-│   ├── retriever.py        # Vector search / FAISS retrieval
-│   ├── prompts.py          # Prompt templates
-│   ├── guardrails.py       # Safety & validation rules
-│   ├── scraper.py          # Data scraping utilities
-│   ├── catalog_loader.py   # Loads SHL dataset
-│
-├── data/
-│   ├── shl_catalog.json
-│   ├── embeddings.npy
-│   ├── faiss.index
-│
-├── approach_document.md    # Design & methodology document
-├── requirements.txt        # Python dependencies
-├── render.yaml             # Deployment config (Render)
-├── .gitignore              # Ignored files
-⚙️ Features
-🔍 Semantic search using embeddings + FAISS
-🤖 LLM-powered conversational responses
-🧠 Context-aware prompt engineering
-🛡️ Guardrails for safe and structured outputs
-⚡ FastAPI-based lightweight backend
-📦 Ready for cloud deployment (Render / similar)
-🔗 API Endpoints
-1. Health Check
-GET /health
+The project also includes guardrails to ensure response quality and consistency, along with a lightweight and scalable FastAPI architecture that makes it easy to deploy on cloud platforms like Render.
 
-Response:
+## Features
+- Semantic search using FAISS vector database  
+- LLM-powered response generation  
+- Context-aware retrieval system (RAG approach)  
+- FastAPI backend for high performance  
+- Deployment-ready architecture  
 
-{
-  "status": "ok"
-}
-2. Chat Endpoint
-POST /chat
+## API Endpoints
+- `/health` → Returns API status  
+- `/chat` → Accepts user query and returns intelligent response  
 
-Request Body:
+## Tech Stack
+Python, FastAPI, FAISS, NumPy, LLM API, Uvicorn
 
-{
-  "message": "What SHL tests are available for Java developers?"
-}
+## Deployment
+The project is ready for deployment using Render or any cloud platform that supports Python FastAPI applications.
 
-Response:
-
-{
-  "response": "Here are relevant SHL assessments..."
-}
-🧠 System Design
-1. Retrieval Layer
-Uses SHL catalog dataset
-Converts text into embeddings
-Stores vectors in FAISS index
-Retrieves top-k similar matches
-2. LLM Layer
-Combines user query + retrieved context
-Uses structured prompt templates
-Generates final response via LLM
-3. Guardrails
-Filters irrelevant outputs
-Ensures response consistency
-Prevents hallucinated results
-🧪 Evaluation Strategy
-Manual test queries across domains
-Checked relevance of retrieved results
-Validated response coherence
-Iteratively improved prompt design
-⚠️ Known Limitations
-Retrieval depends on dataset quality
-Edge-case queries may return partial matches
-Latency depends on embedding + LLM call time
-🛠️ Tech Stack
-Python 3.10+
-FastAPI
-FAISS (vector search)
-NumPy
-OpenAI / LLM API
-Uvicorn
-🚀 Deployment
-
-This project is deployment-ready using Render.
-
-Run locally:
-pip install -r requirements.txt
-uvicorn app.main:app --reload
-🌐 Live API (after deployment)
-https://your-deployed-url.onrender.com
-
-
-Built as part of SHL assignment submission.
-
-📌 Notes
-.env is excluded for security
-Large files like embeddings/index are stored in /data
-Ensure /health and /chat are live before submission
+## Status
+Backend is fully functional with retrieval and LLM integration completed and ready for submission.
