@@ -1,12 +1,6 @@
 from fastapi import FastAPI
 from pydantic import BaseModel
-from typing import List
-import json
-
-from app.retriever import retrieve_assessments
-from app.llm import generate_reply
-from app.prompts import SYSTEM_PROMPT
-from app.guardrails import is_off_topic
+from typing import List, Optional
 
 app = FastAPI()
 
@@ -32,7 +26,7 @@ def health():
 
 
 # -----------------------------
-# Helper Functions
+# Safe fallback functions
 # -----------------------------
 def get_latest_user_message(messages):
     for message in reversed(messages):
@@ -41,145 +35,126 @@ def get_latest_user_message(messages):
     return ""
 
 
-def build_conversation(messages):
-    return "\n".join(
-        [f"{m.role}: {m.content}" for m in messages]
-    )
-
-
-def needs_clarification(user_message):
-    vague_keywords = [
-        "assessment",
-        "test",
-        "hiring",
-        "developer",
-        "engineer",
-        "role"
-    ]
-
+def needs_clarification(user_message: str) -> bool:
+    if not user_message:
+        return True
     if len(user_message.split()) < 5:
         return True
-
-    if any(word in user_message.lower() for word in vague_keywords):
-        if len(user_message.split()) < 10:
-            return True
-
     return False
 
 
 def generate_clarification_question():
     return (
         "Could you share more details about the role, "
-        "seniority level, required technical skills, "
-        "and whether you also want personality or "
-        "behavioral assessments?"
+        "skills required, and seniority level?"
     )
 
 
 # -----------------------------
-# Chat Endpoint
+# Chat Endpoint (SAFE VERSION)
 # -----------------------------
 @app.post("/chat")
 def chat(request: ChatRequest):
 
-    messages = request.messages
+    try:
+        messages = request.messages
+        latest_user_message = get_latest_user_message(messages)
 
-    latest_user_message = get_latest_user_message(messages)
+        # -----------------------------
+        # Simple clarification logic
+        # -----------------------------
+        if needs_clarification(latest_user_message):
+            return {
+                "reply": generate_clarification_question(),
+                "recommendations": [],
+                "end_of_conversation": False
+            }
 
-    # -----------------------------
-    # Off-topic Protection
-    # -----------------------------
-    if is_off_topic(latest_user_message):
+        # -----------------------------
+        # Lazy import (IMPORTANT FIX)
+        # -----------------------------
+        try:
+            from app.retriever import retrieve_assessments
+            from app.llm import generate_reply
+            from app.guardrails import is_off_topic
+        except Exception:
+            return {
+                "reply": "System is initializing. Please try again shortly.",
+                "recommendations": [],
+                "end_of_conversation": False
+            }
+
+        # -----------------------------
+        # Off-topic check
+        # -----------------------------
+        if is_off_topic(latest_user_message):
+            return {
+                "reply": "I can only help with SHL assessment recommendations.",
+                "recommendations": [],
+                "end_of_conversation": False
+            }
+
+        # -----------------------------
+        # Retrieval (safe wrapper)
+        # -----------------------------
+        try:
+            retrieved = retrieve_assessments(latest_user_message, top_k=5)
+        except Exception:
+            retrieved = []
+
+        catalog_context = "\n\n".join([
+            f"Name: {r.get('name','')}\n"
+            f"Description: {r.get('description','')}\n"
+            f"URL: {r.get('url','')}\n"
+            f"Type: {r.get('test_type','Unknown')}"
+            for r in retrieved
+        ])
+
+        # -----------------------------
+        # Prompt
+        # -----------------------------
+        prompt = f"""
+You are an SHL assessment assistant.
+
+User Query:
+{latest_user_message}
+
+Context:
+{catalog_context}
+
+Rules:
+- Recommend only from provided context
+- Be concise and recruiter-friendly
+"""
+
+        # -----------------------------
+        # LLM call (safe wrapper)
+        # -----------------------------
+        try:
+            reply = generate_reply(prompt)
+        except Exception:
+            reply = "Unable to generate response at the moment."
+
+        # -----------------------------
+        # Recommendations
+        # -----------------------------
+        recommendations = []
+        for item in retrieved:
+            recommendations.append({
+                "name": item.get("name"),
+                "url": item.get("url"),
+                "test_type": item.get("test_type", "Unknown")
+            })
+
         return {
-            "reply": (
-                "I can only help with SHL assessment "
-                "recommendations and comparisons."
-            ),
+            "reply": reply,
+            "recommendations": recommendations,
+            "end_of_conversation": True
+        }
+
+    except Exception as e:
+        return {
+            "reply": f"Server error: {str(e)}",
             "recommendations": [],
             "end_of_conversation": False
         }
-
-    # -----------------------------
-    # Clarification Logic
-    # -----------------------------
-    if needs_clarification(latest_user_message):
-        return {
-            "reply": generate_clarification_question(),
-            "recommendations": [],
-            "end_of_conversation": False
-        }
-
-    # -----------------------------
-    # Retrieval
-    # -----------------------------
-    retrieved = retrieve_assessments(
-        latest_user_message,
-        top_k=5
-    )
-
-    # -----------------------------
-    # Catalog Context
-    # -----------------------------
-    catalog_context = "\n\n".join([
-        f"""
-        Name: {r['name']}
-        Description: {r['description']}
-        URL: {r['url']}
-        Type: {r.get('test_type', 'Unknown')}
-        """
-        for r in retrieved
-    ])
-
-    # -----------------------------
-    # Conversation History
-    # -----------------------------
-    conversation = build_conversation(messages)
-
-    # -----------------------------
-    # Prompt
-    # -----------------------------
-    prompt = f"""
-    {SYSTEM_PROMPT}
-
-    Conversation History:
-    {conversation}
-
-    SHL Catalog Context:
-    {catalog_context}
-
-    Instructions:
-    - Recommend ONLY assessments from catalog
-    - Never hallucinate assessments
-    - Be concise and recruiter-friendly
-    - Explain recommendations briefly
-    - If comparing assessments, use catalog context only
-    """
-
-    # -----------------------------
-    # LLM Generation
-    # -----------------------------
-    reply = generate_reply(prompt)
-
-    # -----------------------------
-    # Structured Recommendations
-    # -----------------------------
-    recommendations = []
-
-    for item in retrieved:
-        recommendations.append({
-            "name": item["name"],
-            "url": item["url"],
-            "test_type": item.get(
-                "test_type",
-                "Unknown"
-            )
-        })
-
-    # -----------------------------
-    # Final Response
-    # -----------------------------
-    return {
-        "reply": reply,
-        "recommendations": recommendations,
-        "end_of_conversation": True
-    }
